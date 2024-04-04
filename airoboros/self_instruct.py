@@ -39,6 +39,7 @@ from txtai.pipeline import HFOnnx
 
 # MY ADDITION 1
 from openai import AzureOpenAI
+import traceback
 # END MY ADDITION 1
 
 # Defaults and constants.
@@ -99,35 +100,36 @@ class SelfInstructor:
         """Load an advanced configuration from a YAML file."""
         raw_config = self.raw_config = yaml.safe_load(open(self.config_path).read())
         self.model = raw_config.get("model") or "gpt-4"
-        self.openai_api_key = raw_config.get("openai_api_key") or os.environ.get(
+        
+        self.api_key = raw_config.get("api_key") or os.environ.get(
             "OPENAI_API_KEY"
         )
+        self.api_used = raw_config.get("api_used")
+        assert self.api_used in {'openai', 'openai_azure', 'anthropic'}, "api_used parameter should be among {'openai', 'openai_azure', 'anthropic'}"
+
         # MY ADDITION 2
         self.azure_openai_endpoint = raw_config.get("azure_openai_endpoint")
         self.azure_openai_api_version = raw_config.get("azure_openai_api_version")
         self.azure_openai_deployment_name = raw_config.get("azure_openai_deployment_name")
-        self.azure_client = AzureOpenAI(
-            api_key=self.azure_openai_endpoint,
-            api_version=self.azure_openai_api_version,
-            azure_endpoint=self.azure_openai_deployment_name
-        )
+        
+        self.anthropic_version = raw_config.get("anthropic_version")
         # END MY ADDITION 2
-        if raw_config.get("vertexai_credentials_path"):
-            self._vertexai_token = None
-            self._vertexai_token_date = None
-            self._vertexai_credentials_path = raw_config[
-                "vertexai_credentials_path"
-            ]
-            self._vertexai_region = raw_config.get("vertexai_region", "us-central1")
-            self._vertexai_project_id = raw_config["vertexai_project_id"]
-            self._vertexai_publisher = raw_config.get(
-                "vertexai_publisher", "google"
-            )
-        if not self.openai_api_key:
-            if not raw_config.get("vertexai_credentials_path"):
-                raise ValueError(
-                    "OpenAI API key or vertexai_credentials_path must be provided!"
-                )
+        # if raw_config.get("vertexai_credentials_path"):
+        #     self._vertexai_token = None
+        #     self._vertexai_token_date = None
+        #     self._vertexai_credentials_path = raw_config[
+        #         "vertexai_credentials_path"
+        #     ]
+        #     self._vertexai_region = raw_config.get("vertexai_region", "us-central1")
+        #     self._vertexai_project_id = raw_config["vertexai_project_id"]
+        #     self._vertexai_publisher = raw_config.get(
+        #         "vertexai_publisher", "google"
+        #     )
+        # if not self.api_key:
+        #     if not raw_config.get("vertexai_credentials_path"):
+        #         raise ValueError(
+        #             "OpenAI API key or vertexai_credentials_path must be provided!"
+        #         )
         self.organization_id = raw_config.get("organization_id")
         self.topics_path = raw_config.get("topics_path") or "topics.txt"
         self.output_path = raw_config.get("output_path") or "instructions.jsonl"
@@ -228,32 +230,32 @@ class SelfInstructor:
 
     def validate_vertexai_model(self, model):
         """Ensure the specified model is available in vertexai."""
-        if "chat" not in model:
-            raise ValueError(
-                "Currently, only the chat models are supported for vertexai, sorry"
-            )
-        test_payload = {
-            "instances": [{"messages": [{"author": "user", "content": "hello"}]}],
-            "parameters": {"temperature": 0.1, "maxOutputTokens": 1},
-        }
-        try:
-            headers = {"Authorization": f"Bearer {self.get_vertexai_token()}"}
-            url = VERTEXAI_BASE_URL.format(
-                region=self._vertexai_region,
-                project_id=self._vertexai_project_id,
-                publisher=self._vertexai_publisher,
-                model=model,
-            )
-            result = requests.post(url, json=test_payload, headers=headers)
-            assert result.status_code == 200
-            logger.success(f"Successfully validated model: {model}")
-        except Exception:
-            raise ValueError(f"Error trying to validate vertexai model: {model}")
+        # if "chat" not in model:
+        #     raise ValueError(
+        #         "Currently, only the chat models are supported for vertexai, sorry"
+        #     )
+        # test_payload = {
+        #     "instances": [{"messages": [{"author": "user", "content": "hello"}]}],
+        #     "parameters": {"temperature": 0.1, "maxOutputTokens": 1},
+        # }
+        # try:
+        #     headers = {"Authorization": f"Bearer {self.get_vertexai_token()}"}
+        #     url = VERTEXAI_BASE_URL.format(
+        #         region=self._vertexai_region,
+        #         project_id=self._vertexai_project_id,
+        #         publisher=self._vertexai_publisher,
+        #         model=model,
+        #     )
+        #     result = requests.post(url, json=test_payload, headers=headers)
+        #     assert result.status_code == 200
+        #     logger.success(f"Successfully validated model: {model}")
+        # except Exception:
+        #     raise ValueError(f"Error trying to validate vertexai model: {model}")
 
     def validate_openai_model(self, model):
         """Ensure the specified model is available."""
         # MY ADDITION
-        # headers = {"Authorization": f"Bearer {self.openai_api_key}"}
+        # headers = {"Authorization": f"Bearer {self.api_key}"}
         # if self.organization_id:
         #     headers["OpenAI-Organization"] = self.organization_id
         # result = requests.get(f"{OPENAI_API_BASE_URL}/v1/models", headers=headers)
@@ -447,7 +449,7 @@ class SelfInstructor:
         :return: Response object.
         :rtype: Dict[str, Any]
         """
-        headers = {"Authorization": f"Bearer {self.openai_api_key}"}
+        headers = {"Authorization": f"Bearer {self.api_key}"}
         if self.organization_id:
             headers["OpenAI-Organization"] = self.organization_id
         request_id = str(uuid4())
@@ -515,7 +517,7 @@ class SelfInstructor:
         :return: Response object.
         :rtype: Dict[str, Any]
         """
-        headers = {"api-key": self.openai_api_key}
+        headers = {"api-key": self.api_key}
         request_id = str(uuid4())
         logger.debug(f"POST [{request_id}] with payload {json.dumps(payload)}")
         async with aiohttp.ClientSession() as session:
@@ -528,8 +530,6 @@ class SelfInstructor:
                 if result.status != 200:
                     text = await result.text()
                     logger.error(f"Azure OpenAI request error: {text}")
-                    # logger.info(f"{self.azure_openai_endpoint}openai/deployments/{self.azure_openai_deployment_name}/chat/completions?api-version={self.azure_openai_api_version}")
-                    # logger.info(str(headers))
                     if "too many requests" in text.lower():
                         raise TooManyRequestsError(text)
                     if (
@@ -550,7 +550,66 @@ class SelfInstructor:
                         raise BadResponseError(text)
                 result = await result.json()
                 logger.debug(f"POST [{request_id}] response: {json.dumps(result)}")
+                logger.info(str(result))
                 self.used_tokens += result["usage"]["total_tokens"]
+                if self.max_tokens and self.used_tokens > self.max_tokens:
+                    raise TokensExhaustedError(
+                        f"Max token usage exceeded: {self.used_tokens}"
+                    )
+                logger.debug(f"token usage: {self.used_tokens}")
+                return result
+    
+
+    async def _post_anthropic(self, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Perform a post request to Azure OpenAI API.
+
+        :param path: URL path to send request to.
+        :type path: str
+
+        :param payload: Dict containing request body/payload.
+        :type payload: Dict[str, Any]
+
+        :return: Response object.
+        :rtype: Dict[str, Any]
+        """
+        headers = {
+            "x-api-key": self.api_key,
+            'anthropic-version': self.anthropic_version,
+            }
+        request_id = str(uuid4())
+        logger.debug(f"POST [{request_id}] with payload {json.dumps(payload)}")
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                # f"{self.azure_openai_endpoint}openai/deployments/{self.azure_openai_deployment_name}/chat/completions?api-version={self.azure_openai_api_version}",
+                'https://api.anthropic.com/v1/messages',
+                headers=headers,
+                json=payload,
+                timeout=600.0,
+            ) as result:
+                if result.status != 200:
+                    text = await result.text()
+                    logger.error(f"Anthropic request error: {text}")
+                    if "too many requests" in text.lower():
+                        raise TooManyRequestsError(text)
+                    if (
+                        "rate limit reached" in text.lower()
+                        or "rate_limit_exceeded" in text.lower()
+                    ):
+                        sleep(30)
+                        raise RateLimitError(text)
+                    elif "context_length_exceeded" in text.lower():
+                        raise ContextLengthExceededError(text)
+                    elif "server_error" in text and "overloaded" in text.lower():
+                        raise ServerOverloadedError(text)
+                    elif (
+                        "bad gateway" in text.lower() or "server_error" in text.lower()
+                    ):
+                        raise ServerError(text)
+                    else:
+                        raise BadResponseError(text)
+                result = await result.json()
+                logger.debug(f"POST [{request_id}] response: {json.dumps(result)}")
+                self.used_tokens += result["usage"]["input_tokens"] + result["usage"]["output_tokens"]
                 if self.max_tokens and self.used_tokens > self.max_tokens:
                     raise TokensExhaustedError(
                         f"Max token usage exceeded: {self.used_tokens}"
@@ -562,10 +621,20 @@ class SelfInstructor:
     async def _post_no_exc_openai(self, *a, **k):
         """Post to OpenAI, ignoring all exceptions."""
         try:
-            return await self._post_openai_azure(*a, **k)
+            if self.api_used == 'openai':
+                return await self._post_openai(*a, **k)
+            elif self.api_used == 'openai_azure':
+                return await self._post_openai_azure(*a, **k)
         except Exception as ex:
             logger.error(f"Error performing post: {ex}")
+            # logger.error(traceback.format_exc())
         return None
+    
+    async def _post_no_exc_anthropic(self, *a, **k):
+        try:
+            return await self._post_anthropic(*a, **k)
+        except Exception as ex:
+            logger.error(f"Error performing post: {ex}")
 
     async def _post_no_exc_vertexai(self, *a, **k):
         """Post to VertexAI, ignoring all exceptions."""
@@ -679,13 +748,59 @@ class SelfInstructor:
                 logger.warning(f"Banned response [apology]: {text}")
                 return None
         return text
+    
+    async def generate_response_anthropic(self, instruction: str, **kwargs) -> str:
+        """Call the model endpoint with the specified instruction and return the text response.
+
+        :param instruction: The instruction to respond to.
+        :type instruction: str
+
+        :return: Response text.
+        :rtype: str
+        """
+        messages = copy.deepcopy(kwargs.pop("messages", None) or [])
+        filter_response = kwargs.pop("filter_response", True)
+        model = kwargs.get("model", self.model)
+        path = "/v1/chat/completions"
+        payload = {**kwargs}
+        if "model" not in payload:
+            payload["model"] = model
+        payload["messages"] = messages
+        # Fix payload parameters
+        payload["max_tokens"] = 4096
+        if "frequency_penalty" in payload:
+            del payload['frequency_penalty']
+        if "presence_penalty" in payload:
+            del payload['presence_penalty']
+        # end fix payload parameters
+        if instruction:
+            payload["messages"].append({"role": "user", "content": instruction})
+        response = await self._post_no_exc_anthropic(path, payload)
+        if (
+            not response
+            or response['stop_reason'] == "max_tokens"
+        ):
+            return None
+        text = response['content'][0]['text']
+
+        if filter_response:
+            for banned in self.response_filters:
+                if banned.search(text, re.I):
+                    logger.warning(f"Banned response [{banned}]: {text}")
+                    return None
+            if text.startswith(("I'm sorry,", "Apologies,", "I can't", "I won't", "Maaf")):
+                logger.warning(f"Banned response [apology]: {text}")
+                return None
+        return text
 
     async def generate_response(self, instruction: str, **kwargs) -> str:
         """Generate a response - wrapper around the openai/vertexai methods above."""
         model = kwargs.pop("model", None) or self.model
-        if model in OPENAI_MODELS:
+        if self.api_used in {'openai', 'openai_azure'}:
             return await self.generate_response_openai(instruction, **kwargs)
-        return await self.generate_response_vertexai(instruction, **kwargs)
+        if self.api_used in {'anthropic'}:
+            return await self.generate_response_anthropic(instruction, **kwargs)
+        # return await self.generate_response_vertexai(instruction, **kwargs)
 
     async def is_decent_response(self, item):
         """Filter the responses by having the LLM score based on a set of rules."""
