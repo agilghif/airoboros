@@ -1,5 +1,5 @@
 # The model to use in generation.  Available models: https://platform.openai.com/docs/models/continuous-model-upgrades
-model: "gpt-4"
+model: "claude-3-haiku-20240307"
   
 # To use VertexAI (e.g. chat-bison or soon hopefully gemini):
 # model: "chat-bison"
@@ -7,17 +7,26 @@ model: "gpt-4"
 # vertexai_project_id: replace-project-id
 # vertexai_publisher: google
 
-# OpenAI API key (if null, uses environment variable OPENAI_API_KEY)
-openai_api_key:
+# API specs & creds
+api_used: ...  # possible values = {openai, openai_azure, anthropic}
+api_key: ...
+
+# Azure OpenAI Configs
+azure_openai_endpoint: 
+azure_openai_api_version: 
+azure_openai_deployment_name: 
+
+# Anthropics Configs
+anthropic_version: '2023-06-01'
 
 # Optionally configure the OpenAI organization ID.
 organization_id:
 
 # Combined output file path.
-output_path: instructions.jsonl
+output_path: instructions-claude-haiku.jsonl
 
 # Path to the default topics file.
-topics_path: topics.txt
+topics_path: /home/agil/llm_data_generation/topics.txt
 
 # Overwrite the output file, use with care!
 overwrite: false
@@ -27,9 +36,9 @@ append: true
 
 # Embedding model, for calculating similarity between documents; probably best left as-is since the code is fairly specific to this one.
 embedding_model: thenlper/gte-small
-embedding_device: cpu
+# embedding_device: cpu
 # If you have a GPU, set this to "cuda", e.g.:
-# embedding_device: cuda
+embedding_device: cuda
 
 # Topic avoidance prompt string.
 topic_avoidance: Avoid any tasks that would be related to climate change, green tech, renewable energy, DEI (diversity, equity, inclusion), sex and/or gender, religion, politics, social issues, race, ethnicity, artificial intelligence, baking/cooking, urban development, or any topic that you would likely not respond to, or any task which a language model would not be able to respond to, e.g. tasks about emotions, feelings, physical senses, etc.
@@ -54,20 +63,20 @@ response_filters:
   - "flesch"
 
 # Optionally limit the maximum number of tokens to use when generating instructions.
-max_tokens:
+max_tokens: 1_000_000
 
 # Minimum similarity score when checking for duplicates.
 min_docsearch_score: 0.07
 
 # Default OpenAI API request parameters.
 api_params:
-  temperature: 1.0
-  top_p: 1.0
+  temperature: 0.7
+  top_p: 0.95
   frequency_penalty: 0.0
   presence_penalty: 0.0
 
 # Topic generation prompt.
-topic_prompt: Give me a numbered list of 20 completely random topics. {topic_avoidance}
+topic_prompt: Give me a numbered list of 20 completely random topics written in Bahasa Indonesia. {topic_avoidance}
 topic_request_count: 20
 
 # Default count per generator, if not specified.
@@ -80,7 +89,7 @@ default_batch_size: 10
 default_flesch: The output should be written in such a way as to have a Flesch-Kincaid readability score of 30 or lower - best understood by those with college education.  The response must not contain any notes or information about Flesch-Kincaid scores.
 
 # Language.
-language: English
+language: Indonesian
 
 # Individual instructor configurations.
 instructors:
@@ -90,7 +99,7 @@ instructors:
   general:
 
     # Number of instructions to generate.
-    count: 100
+    count: 1
 
     # Batch size/number of instructions to generate per request.
     batch_size: 10
@@ -332,15 +341,15 @@ instructors:
 
   ##################################################################################
   # Character/scenario card tasks.
-  card:
-    api_params:
-      temperature: 0.9
-    count: 50
-    batch_size: 5
-    min_docsearch_score: 0.05
+  # card:
+  #   api_params:
+  #     temperature: 0.9
+  #   count: 50
+  #   batch_size: 5
+  #   min_docsearch_score: 0.05
 
   ##################################################################################
-  # Jokes.
+  Jokes.
   joke:
     api_params:
       temperature: 0.9
